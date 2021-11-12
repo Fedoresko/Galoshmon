@@ -1,0 +1,43 @@
+plugins {
+    id 'java'
+}
+
+group 'org.example'
+version '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDirs "src/main/resources"
+        }
+    }
+}
+
+dependencies {
+    implementation 'ru.odnoklassniki:one-nio:1.4.0'
+    implementation 'io.pkts:pkts-core:3.0.0'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+}
+
+task copyToLib(type: Copy) {
+    into "$buildDir/libs"
+    from configurations.runtimeClasspath, "${project.projectDir}/conf.properties"
+}
+
+jar {
+    dependsOn(copyToLib)
+    manifest {
+        attributes ('Main-Class': 'ru.odkl.pacmon.Main',
+        "Class-Path": configurations.runtimeClasspath.collect { it.getName() }.join(' '))
+    }
+}
+
+test {
+    useJUnitPlatform()
+}

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Калошмон traffic filter</title>
+    <script language="JavaScript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script language="JavaScript">
+        var selected_port = 6333;
+        var selected_conv = "UUID1";
+        var pollingReq = null;
+        var last_conv = "UUID1";
+        var rbar;
+        var portsdiv;
+        var convarea;
+        var addialog;
+
+
+        function updPorts() {
+            $.ajax({ url: "/ports", success: function(data) {
+                portsdiv.empty();
+                data.forEach(item => portsdiv.append("<div class=\"port\" id=\""+item+"\">"+item+"</div>\n"));
+                 $("#"+selected_port).addClass("selected");
+                 subscribePorts();
+            }, complete: function(xhr, status) {
+                if (xhr.status == 302) {
+                    window.location = xhr.getResponseHeader('Location');
+                } else {
+                    window.setTimeout(updPorts, 2000);
+                }
+            }, timeout: 30000});
+        }
+
+        function pollConv() {
+            if (pollingReq != null) {
+                pollingReq.abort();
+            }
+
+            var pollUrl = last_conv != null ? "/conversations?port="+selected_port+"&start="+last_conv : "/conversations?port="+selected_port;
+            pollingReq = $.ajax({ url: pollUrl, success: function(data) {
+                last_conv = data.last;
+
+                data.convs.forEach(item => {
+                    var text = "<div class=\"conversation\" id=\""+item.uuid+"\" onclick=\"conversationClick\">Time: "+item.time+"<br>Host: "+item.host+
+                    "<div class=\"msgcount\">"+item.outgoing+"↑ "+item.incoming+"↓</div><div class=\"fltcount\">";
+                    item.marks.forEach(mark => {
+                        text += "<div class=\"flt\" style=\"background-color: hsl("+mark.hue+", 75%, 25%)\">"+mark.nHits+"</div>";
+                    });
+                    rbar.prepend(text + "</div></div>\n");
+
+                    //rbar.prepend("<div class=\"conversation\" id=\""+item.uuid+"\">Time: "+item.time+"<br>Host: "+item.host+"</div>\n")
+                });
+                pollConv();
+            }, complete: function(jxr, status) {
+                if (status != "abort" && status != "success") {
+                    window.setTimeout( pollConv, 500);
+                }
+            }, timeout: 30000});
+        }
+
+        function stopPoll() {
+            if (pollingReq != null) {
+                pollingReq.abort();
+                pollingReq = null;
+            }
+        }
+
+        function takeHistory() {
+            var uuid = $("div.conversation").last().attr("id");
+            $.ajax({ url: "/conversationsHistory?port="+selected_port+"&start="+uuid, success: function(data){
+                var rbar = $("div.rightbar");
+
+                data.convs.forEach(item => {
+                    var text = "<div class=\"conversation\" id=\""+item.uuid+"\" onclick=\"conversationClick\">Time: "+item.time+"<br>Host: "+item.host+
+                    "<div class=\"msgcount\">"+item.outgoing+"↑ "+item.incoming+"↓</div><div class=\"fltcount\">";
+                    item.marks.forEach(mark => {
+                        text += "<div class=\"flt\" style=\"background-color: hsl("+mark.hue+", 75%, 25%)\">"+mark.nHits+"</div>";
+                    });
+                    rbar.append(text + "</div></div>\n");
+                });
+            }, timeout: 30000})
+        }
+
+        function subscribePorts() {
+            $( "div.port" ).on( "click", function( event ) {
+                if (selected_port != $(this).attr("id")) {
+                    $("#"+selected_port).removeClass("selected");
+                    selected_port = $(this).attr("id");
+                    $(this).addClass("selected");
+                    stopPoll();
+                    last_conv = null;
+                    rbar.empty();
+                    convarea.empty();
+                    pollConv();
+                }
+            });
+        }
+
+        function fetchMessages() {
+            convarea.empty()
+            if (selected_port != null && selected_conv != null) {
+                $.ajax({ url: "/conversation?port="+selected_port+"&uuid="+selected_conv, success: function(data){
+                    data.messages.forEach(item => {
+                        var cl = item.incoming ? "incoming" : "outgoing";
+                        var sign = item.incoming ? "&lt;" : "&gt;";
+                        convarea.append("<div class=\"message "+cl+"\">"+sign+" "+atob(item.data)+"</div>");
+                    });
+                }, timeout: 30000});
+            }
+        }
+
+        function removeFilter(fname) {
+            $.ajax({url: "/removefilter", method: "DELETE",
+                data: { name: fname },
+                complete: function(jxr, status) {
+                    fetchFilters();
+                } });
+            window.setTimeout(fetchFilters, 300);
+        }
+
+        function addfilter(isOk) {
+            if (isOk) {
+                var fname = $("#filtername").val();
+                var freg = $("#filterregexp").val();
+                $.ajax({url: "/addfilter", method: "POST",
+                    dataType: 'json',
+                    data: { name: fname, regexp: freg },
+                    complete: function(jxr, status) {
+                        fetchFilters();
+                    } });
+                window.setTimeout(fetchFilters, 300);
+            }
+            $("#filtername").val('')
+            $("#filterregexp").val('');
+            addialog.hide();
+        }
+
+        function fetchFilters() {
+            filtersdiv.empty();
+            filtersdiv.append("<input type=\"button\" value=\"Add...\" onclick=\"addialog.show()\">");
+            $.ajax({ url: "/filters", success: function(data){
+                data.forEach(item => {
+                    filtersdiv.append("<div class=\"filter\" style=\"background-color: hsl("+item.hue+", 75%, 25%)\" ondblclick=\"removeFilter(this.textContent)\" >"+item.name+"</div>");
+                });
+            }, timeout: 30000});
+        }
+
+        function conversationClick(event) {
+            $("#"+selected_conv).removeClass("selected");
+            selected_conv = $(this).attr("id");
+            $(this).addClass("selected");
+            fetchMessages();
+        }
+
+        $(document).ready(function() {
+            rbar = $("div.rightbar");
+            portsdiv = $("div.ports");
+            convarea = $("div.convarea");
+            filtersdiv = $("div.filters");
+            addialog =  $("#addfilter");
+
+            subscribePorts();
+
+            rbar.on('click', 'div.conversation', conversationClick);
+
+            rbar.on('scroll', function() {
+                if ($(this).scrollTop() == 0 && pollingReq == null) {
+                    pollConv();
+                }
+                if ($(this).scrollTop() > 0 && pollingReq != null) {
+                    stopPoll();
+                }
+                if($(this).scrollTop() + $(this).innerHeight() >= $(this)[0].scrollHeight) {
+                    takeHistory();
+                }
+            });
+
+            updPorts();
+            fetchFilters();
+        });
+    </script>
+    <style>
+        html {
+            height: 100%;
+        }
+        body {
+            margin: 0;
+            height: 100%;
+        }
+        div.main {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        div.head {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            background-color: #DDDDDD;
+        }
+        div.ports {
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            padding: 10px 30px 10px 50px;
+            border-bottom: 1px solid gray;
+        }
+        div.port {
+            padding: 6px;
+            border-radius: 3px;
+            font: bold 14px sans-serif;
+            color: white;
+            background-color: brown;
+        }
+        div.filters {
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            padding: 10px 30px 10px 50px;
+            border-top: 1px solid white;
+        }
+        div.filter {
+            padding: 6px;
+            border-radius: 3px;
+            font: bold 14px sans-serif;
+            color: white;
+        }
+        div.barea {
+            display: flex;
+            flex-direction: row;
+            flex-grow: 1;
+            max-height: calc(100% - 108px);
+        }
+        div.rightbar {
+            display: flex;
+            flex-direction: column;
+            background-color: gray;
+            overflow-y:auto;
+            min-width: fit-content;
+        }
+        div.conversation {
+            width: 250px;
+            background-color: lightgray;
+            padding: 15px;
+            border-bottom: 1px solid gray;
+            color: black;
+            font: 12px sans-serif;
+            position: relative;
+        }
+        div.convarea {
+            display: flex;
+            flex-grow: 1;
+            padding: 20px;
+            gap: 20px;
+            flex-direction: column;
+            border-left: 1px solid gray;
+            overflow-y:auto;
+        }
+        div.message {
+            padding: 5px;
+            font: bold 14px courier;
+            overflow-wrap: break-word;
+        }
+        div.incoming {
+            background-color: #FFDDDD;
+            color: #AA0000;
+        }
+        div.outgoing {
+            background-color: #DDFFDD;
+            color: #00AA00;
+        }
+        div.port.selected {
+            background-color: #7f97ff;
+        }
+        div.conversation.selected {
+            background-color: #7f97ff;
+        }
+        div.capt {
+            color: black;
+            font: 20px Arial;
+        }
+        div.msgcount {
+            font: 12px sans-serif;
+            position: absolute;
+            right: 0px;
+            top: 0px;
+            margin: 5px;
+        }
+        div.fltcount {
+            position: absolute;
+            right: 0px;
+            bottom: 0px;
+            display: flex;
+            gap: 4px;
+            margin: 5px;
+        }
+        div.flt {
+            font: 10px sans-serif;
+            border-radius: 2px;
+            font-weight: bold;
+            color: white;
+            padding: 3px;
+        }
+        div.hh {
+            display: flex;
+            align-items: stretch;
+            border-bottom: 2px solid gray;
+            background-color: #DDDDDD;
+        }
+        div.title {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            padding-top: 15px;
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+        div.title p {
+            font: 20px Arial;
+            font-weight: bold;
+            margin: 0px;
+        }
+        div#addfilter {
+            position: absolute;
+            width: 400px;
+            height: 150px;
+            background-color: lightgray;
+            border: 1px solid gray;
+            top: calc(50% - 75px);
+            left: calc(50% - 200px);
+            z-index: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-family: sans-serif;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+<div id="addfilter" style="display: none">
+    <h2 style="margin:0px">New filter</h2>
+    <table>
+        <tr>
+            <td>Filter name:</td><td><input type="text" id="filtername" size="40"></td>
+        </tr>
+        <tr>
+            <td>Filter regexp:</td><td><input type="text" id="filterregexp" size="40"></td>
+        </tr>
+    </table>
+    <input type="button" value="OK" onclick="addfilter(true)"><input type="button" value="Cancel" onclick="addfilter(false)">
+</div>
+<div class="main">
+    <div class="hh">
+        <div class="title">
+            <p>Ports:</p>
+            <p>Filters:</p>
+        </div>
+        <div class="head">
+            <div class="ports">
+                <div class="port" id="433">433</div>
+                <div class="port" id="43367">43567</div>
+                <div class="port" id="8080">8080</div>
+                <div class="port selected" id="6333">6333</div>
+            </div>
+            <div class="filters">
+                <div class="filter" style="background-color: rgb(255, 255, 128)">GET</div>
+                <div class="filter" style="background-color: #74992e">Duremar</div>
+                <div class="filter" style="background-color: red">flag</div>
+            </div>
+        </div>
+        <img src="/logo" style="right:0; top:0; height:105px">
+    </div>
+    <div class="barea">
+        <div class="rightbar">
+            <div class="conversation selected" id="UUID1">
+                Time: 22:43:44<br>
+                Host: 123.345.432.122
+            </div>
+            <div class="conversation" id="UUID2">
+                Time: 22:43:45<br>
+                Host: 12.145.223.12
+            </div>
+            <div class="conversation" id="UUID3">
+                Time: 22:43:54<br>
+                Host: 123.345.432.122
+                <div class="msgcount">1↑ 1↓</div>
+                <div class="fltcount"><div class="flt" style="background-color: red">1</div><div class="flt"  style="background-color: blue">2</div></div>
+            </div>
+        </div>
+        <div class="convarea">
+            <div class="message incoming">
+                > Lorem ipsum Lorem ipsum Lorem ipsum Lorem ipsum
+            </div>
+            <div class="message outgoing">
+                < Lorem ipsum Lorem ipsum Lorem ipsum Lorem ipsum
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
