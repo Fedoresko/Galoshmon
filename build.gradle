@@ -19,7 +19,7 @@ sourceSets {
 
 dependencies {
     implementation 'ru.odnoklassniki:one-nio:1.4.0'
-    implementation 'io.pkts:pkts-core:3.0.0'
+    implementation 'io.pkts:pkts-core:3.0.10'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
@@ -33,7 +33,7 @@ task copyToLib(type: Copy) {
 jar {
     dependsOn(copyToLib)
     manifest {
-        attributes ('Main-Class': 'ru.odkl.pacmon.Main',
+        attributes ('Main-Class': 'ru.ctf.galoshmon.Main',
         "Class-Path": configurations.runtimeClasspath.collect { it.getName() }.join(' '))
     }
 }

@@ -19,13 +19,12 @@
             $.ajax({ url: "/ports", success: function(data) {
                 portsdiv.empty();
                 data.forEach(item => portsdiv.append("<div class=\"port\" id=\""+item+"\">"+item+"</div>\n"));
-                 $("#"+selected_port).addClass("selected");
-                 subscribePorts();
-            }, complete: function(xhr, status) {
-                if (xhr.status == 302) {
+                $("#"+selected_port).addClass("selected");
+                subscribePorts();
+                window.setTimeout(updPorts, 2000);
+            }, error: function(xhr, status) {
+                if (xhr.status == 401) {
                     window.location = xhr.getResponseHeader('Location');
-                } else {
-                    window.setTimeout(updPorts, 2000);
                 }
             }, timeout: 30000});
         }
@@ -50,6 +49,10 @@
                     //rbar.prepend("<div class=\"conversation\" id=\""+item.uuid+"\">Time: "+item.time+"<br>Host: "+item.host+"</div>\n")
                 });
                 pollConv();
+            }, error: function(xhr, status) {
+                if (xhr.status == 401) {
+                    window.location = xhr.getResponseHeader('Location');
+                }
             }, complete: function(jxr, status) {
                 if (status != "abort" && status != "success") {
                     window.setTimeout( pollConv, 500);
@@ -372,7 +375,7 @@
                 <div class="filter" style="background-color: red">flag</div>
             </div>
         </div>
-        <img src="/logo" style="right:0; top:0; height:105px">
+        <img src="/logo" style="right:0; top:0; height:105px" alt="Калошмон v1.0">
     </div>
     <div class="barea">
         <div class="rightbar">

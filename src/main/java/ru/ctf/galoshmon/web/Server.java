@@ -10,12 +10,11 @@ import ru.ctf.galoshmon.web.filters.Filter;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 public class Server extends HttpServer {
@@ -23,13 +22,11 @@ public class Server extends HttpServer {
     public static final int POLLING_TIMEOUT = 2000;
     public static final String SESSION_ID_COOKIE = "SessionID";
     public static final String FILTERS_KEY = "filters";
-    private SecureRandom secureRandom = new SecureRandom();
-
-    private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
+    private final Authenticator authentication = new Authenticator();
+    private Random random = new Random();
 
     public Server() throws IOException {
         super(getConfig());
-        secureRandom.setSeed(System.nanoTime());
     }
 
     private static HttpServerConfig getConfig() {
@@ -45,32 +42,12 @@ public class Server extends HttpServer {
 
     @Override
     public void handleRequest(Request request, HttpSession session) throws IOException {
-        if ("/auth".equals(request.getPath())) {
-            super.handleRequest(request, session);
-            return;
+        Session sessionLocal = authentication.check(request, session);
+        if (sessionLocal != null) {
+            super.handleRequest(new SessionRequest(request, sessionLocal), session);
         }
-
-        String cookies = request.getHeader("Cookie:");
-        if (cookies != null) {
-            for (String cookie : cookies.split(";")) {
-                String name = cookie.trim().split("=")[0];
-                String val = cookie.trim().split("=")[1];
-                if (SESSION_ID_COOKIE.equals(name)) {
-                    Session sessionLocal = sessions.get(val);
-                    if (sessionLocal != null) {
-                        if (sessionLocal.isExpired()) {
-                            sessions.remove(val);
-                        } else {
-                            super.handleRequest(new SessionRequest(request, sessionLocal), session);
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
-        session.sendResponse(Response.redirect("/auth"));
     }
+
 
     @Path("/")
     @RequestMethod(Request.METHOD_GET)
@@ -93,39 +70,7 @@ public class Server extends HttpServer {
     @Path("/auth")
     @RequestMethod(Request.METHOD_POST)
     public Response postAuth(Request request) throws UnsupportedEncodingException {
-        Map<String, String> params = getFormEncodedParams(request);
-
-        String name = params.get("name");
-        String password = params.get("password");
-
-        if (Main.config.getProperty("user", "a").equals(name) && Main.config.getProperty("password", "b").equals(password)) {
-            Response response = Response.redirect("/");
-            Session session = new Session();
-            byte[] bb = new byte[256];
-            secureRandom.nextBytes(bb);
-            String id = new String(Base64.getEncoder().encode(bb)).replace("=", "");
-            sessions.put(id, session);
-            List<Filter> filters = new CopyOnWriteArrayList<>();
-            filters.add(new Filter("GET", "^GET",100));
-            filters.add(new Filter("POST", "^POST", 230));
-            session.put(FILTERS_KEY, filters);
-            response.addHeader("Set-Cookie: " + SESSION_ID_COOKIE + "=" + id);
-            return response;
-        }
-
-        return Response.redirect("/auth");
-    }
-
-    private Map<String, String> getFormEncodedParams(Request request) throws UnsupportedEncodingException {
-        String body = new String(request.getBody());
-        Map<String, String> params = new HashMap<>();
-        for (String p : body.split("&")) {
-            String[] fields = p.trim().split("=");
-            if (fields.length == 2) {
-                params.put(fields[0], java.net.URLDecoder.decode(fields[1],StandardCharsets.UTF_8.name()));
-            }
-        }
-        return params;
+        return authentication.authenticate(request);
     }
 
     @Path("/ports")
@@ -138,7 +83,7 @@ public class Server extends HttpServer {
     @Path("/filters")
     @RequestMethod(Request.METHOD_GET)
     public Response getFilters(Request request) throws IOException {
-        List<Filter> filters = (List<Filter>)((SessionRequest)request).getSession().get(FILTERS_KEY);
+        List<Filter> filters = (List<Filter>) ((SessionRequest) request).getSession().get(FILTERS_KEY);
         String json = Json.toJson(filters);
         return getResponseJson(json);
     }
@@ -146,12 +91,12 @@ public class Server extends HttpServer {
     @Path("/addfilter")
     @RequestMethod(Request.METHOD_POST)
     public Response newFilter(Request request) throws UnsupportedEncodingException {
-        List<Filter> filters = (List<Filter>)((SessionRequest)request).getSession().get(FILTERS_KEY);
-        Map<String, String> params = getFormEncodedParams(request);
+        List<Filter> filters = (List<Filter>) ((SessionRequest) request).getSession().get(FILTERS_KEY);
+        Map<String, String> params = Util.getFormEncodedParams(request);
         String name = params.get("name");
         String regexp = params.get("regexp");
         if (name != null && regexp != null) {
-            filters.add(new Filter(name, regexp, secureRandom.nextInt(360)));
+            filters.add(new Filter(name, regexp, random.nextInt(360)));
             return new Response(Response.CREATED);
         }
         return new Response(Response.BAD_REQUEST);
@@ -160,8 +105,8 @@ public class Server extends HttpServer {
     @Path("/removefilter")
     @RequestMethod(Request.METHOD_DELETE)
     public Response removeFilter(Request request) throws UnsupportedEncodingException {
-        List<Filter> filters = (List<Filter>)((SessionRequest)request).getSession().get(FILTERS_KEY);
-        Map<String, String> params = getFormEncodedParams(request);
+        List<Filter> filters = (List<Filter>) ((SessionRequest) request).getSession().get(FILTERS_KEY);
+        Map<String, String> params = Util.getFormEncodedParams(request);
         String name = params.get("name");
         if (name != null) {
             filters.removeIf(f -> f.name.equals(name));
@@ -181,7 +126,7 @@ public class Server extends HttpServer {
             ConcurrentNavigableMap<Long, ConversationImmutable> convs = Main.conversations.get(port);
 
             if (convs != null) {
-                List<Filter> filters = (List<Filter>)((SessionRequest)request).getSession().get(FILTERS_KEY);
+                List<Filter> filters = (List<Filter>) ((SessionRequest) request).getSession().get(FILTERS_KEY);
                 long startTime = System.currentTimeMillis();
                 while (System.currentTimeMillis() - startTime < POLLING_TIMEOUT) {
                     if (start != null) {
@@ -207,7 +152,7 @@ public class Server extends HttpServer {
             int port = Integer.parseInt(portStr.substring(1));
             ConversationImmutable conversation = Main.conversations.get(port).get(Long.parseLong(uuid.substring(1)));
             if (conversation != null) {
-                List<Filter> filters = (List<Filter>)((SessionRequest)request).getSession().get(FILTERS_KEY);
+                List<Filter> filters = (List<Filter>) ((SessionRequest) request).getSession().get(FILTERS_KEY);
                 return getResponseJson(Json.toJson(new MessagesJS(conversation, filters)));
             }
         }
@@ -222,7 +167,7 @@ public class Server extends HttpServer {
         Response response = new Response(Response.OK);
         response.setBody(h);
         response.addHeader("Date: " + LocalDateTime.now());
-        response.addHeader("Content-Type: "+mime);
+        response.addHeader("Content-Type: " + mime);
         response.addHeader("Content-Length: " + h.length);
         response.addHeader("Connection: close");
         return response;

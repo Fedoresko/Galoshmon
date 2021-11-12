@@ -16,7 +16,6 @@ public class Main {
     private static Process tcpDumpProcess;
 
     public static void main(String[] args) throws IOException, InterruptedException, ExecutionException {
-        ClassLoader loader = Thread.currentThread().getContextClassLoader();
         try (InputStream stream = new FileInputStream("conf.properties")) {
             config.load(stream);
         }
@@ -37,11 +36,6 @@ public class Main {
                 if ("stop".equals(command)) {
                     break;
                 }
-                if ("webr".equals(command)) {
-                    log.info("Restarting web server");
-                    server.stop();
-                    server.start();
-                }
                 if (command.startsWith("tcpdump")) {
                     stopDumpProcessing();
                     startDumpProcessing("tcpdump -w - -nli " + command.substring(7).trim());
@@ -53,29 +47,6 @@ public class Main {
             server.stop();
             log.info("Web server stopped.");
         }
-
-
-//        System.out.println("Results: ");
-//        for (Map.Entry<Integer, ConcurrentNavigableMap<Long, ConversationImmutable>> entry : conversations.entrySet()) {
-//            System.out.println("Port: "+entry.getKey()+" ********************************************");
-//
-//            for (ConversationImmutable conversation : entry.getValue().values()) {
-//                if (conversation.messages.size() > 0) {
-//                    System.out.println("    Conversation -------------------------------------------");
-//
-//                    System.out.println("    Time: " + conversation.time);
-//                    System.out.println("    Host: " + conversation.host);
-//
-//                    for (Message message : conversation.messages) {
-//
-//                        System.out.println("        " + (message.incoming ? ">>>" : "<<<") + " " + message.data);
-//                        System.out.println();
-//                    }
-//                    System.out.println();
-//                }
-//            }
-//            System.out.println("-----------------------------------------------");
-//        }
     }
 
     private static void startDumpProcessing(String cmd) throws IOException {

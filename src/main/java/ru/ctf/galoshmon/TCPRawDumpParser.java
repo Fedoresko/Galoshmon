@@ -3,6 +3,7 @@ package ru.ctf.galoshmon;
 import io.pkts.Pcap;
 import io.pkts.buffer.Buffer;
 import io.pkts.buffer.ByteBuffer;
+import io.pkts.packet.IPPacket;
 import io.pkts.packet.TCPPacket;
 import io.pkts.protocol.Protocol;
 import org.apache.log4j.Logger;
@@ -47,46 +48,51 @@ public class TCPRawDumpParser {
                             }
                         }
 
-                        packet = packet.getPacket(Protocol.TCP);
-
+                        packet = packet.getPacket(Protocol.IPv4);
                         if (packet != null) {
-                            TCPPacket p = (TCPPacket) packet;
-                            Buffer payload = p.getPayload();
-                            String time = formatter.format(new Date(p.getArrivalTime() / 1000));
-                            String from = p.getSourceIP();
-                            String to = p.getDestinationIP();
+                            IPPacket ipp = (IPPacket) packet;
+                            String from = ipp.getSourceIP();
+                            String to = ipp.getDestinationIP();
 
-                            int length = payload == null ? 0 : payload.getReadableBytes();
-
-                            boolean incoming = to.equals(localAddress);
-                            String host = incoming ? from : to;
-                            int port = incoming ? p.getDestinationPort() : p.getSourcePort();
+                            packet = packet.getPacket(Protocol.TCP);
+                            if (packet != null) {
+                                TCPPacket p = (TCPPacket) packet;
+                                Buffer payload = p.getPayload();
+                                String time = formatter.format(new Date(p.getArrivalTime() / 1000));
 
 
-                            if (incoming && p.isSYN()) {
-                                storeConversation(from);
-                                lastTalks.put(from, new Conversation(LocalTime.parse(time), host, port));
-                                log.debug("Start new conv");
+                                int length = payload == null ? 0 : payload.getReadableBytes();
 
-                            } else if (p.isFIN() || p.isRST()) {
-                                storeConversation(from);
-
-                                log.debug("End conv");
-                            } else if (length > 0) {
-                                Conversation conversation = lastTalks.computeIfAbsent(incoming ? from : to, ff -> new Conversation(LocalTime.parse(time), host, port));
+                                boolean incoming = to.equals(localAddress);
+                                String host = incoming ? from : to;
+                                int port = incoming ? p.getDestinationPort() : p.getSourcePort();
 
 
-                                ByteBuffer buffer = (ByteBuffer) payload.readBytes(length);
-                                String data = new String(buffer.getArray());
+                                if (incoming && p.isSYN()) {
+                                    storeConversation(from);
+                                    lastTalks.put(from, new Conversation(LocalTime.parse(time), host, port));
+                                    log.debug("Start new conv");
 
-                                if (!conversation.messages.isEmpty() && conversation.messages.peekLast().incoming == incoming) {
-                                    Message last = conversation.messages.pollLast();
-                                    data = last.data + data;
+                                } else if (p.isFIN() || p.isRST()) {
+                                    storeConversation(from);
+
+                                    log.debug("End conv");
+                                } else if (length > 0) {
+                                    Conversation conversation = lastTalks.computeIfAbsent(incoming ? from : to, ff -> new Conversation(LocalTime.parse(time), host, port));
+
+
+                                    ByteBuffer buffer = (ByteBuffer) payload.readBytes(length);
+                                    String data = new String(buffer.getArray());
+
+                                    if (!conversation.messages.isEmpty() && conversation.messages.peekLast().incoming == incoming) {
+                                        Message last = conversation.messages.pollLast();
+                                        data = last.data + data;
+                                    }
+
+                                    conversation.messages.addLast(new Message(LocalTime.parse(time), host, port, data, incoming));
+
+                                    log.debug("New port " + port + " host " + (incoming ? from : to) + " incoming: " + incoming + " data: '" + data + "'");
                                 }
-
-                                conversation.messages.addLast(new Message(LocalTime.parse(time), host, port, data, incoming));
-
-                                log.debug("New port " + port + " host " + (incoming ? from : to) + " incoming: " + incoming + " data: '" + data + "'");
                             }
                         }
                     } catch (Exception e) {
