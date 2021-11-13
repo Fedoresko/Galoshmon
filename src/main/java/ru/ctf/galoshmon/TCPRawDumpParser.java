@@ -3,7 +3,7 @@ package ru.ctf.galoshmon;
 import io.pkts.Pcap;
 import io.pkts.buffer.Buffer;
 import io.pkts.buffer.ByteBuffer;
-import io.pkts.packet.IPPacket;
+import io.pkts.packet.IPv4Packet;
 import io.pkts.packet.TCPPacket;
 import io.pkts.protocol.Protocol;
 import org.apache.log4j.Logger;
@@ -50,9 +50,10 @@ public class TCPRawDumpParser {
 
                         packet = packet.getPacket(Protocol.IPv4);
                         if (packet != null) {
-                            IPPacket ipp = (IPPacket) packet;
+                            IPv4Packet ipp = (IPv4Packet) packet;
                             String from = ipp.getSourceIP();
                             String to = ipp.getDestinationIP();
+                            int ttl = ipp.getTimeToLive();
 
                             packet = packet.getPacket(Protocol.TCP);
                             if (packet != null) {
@@ -70,7 +71,7 @@ public class TCPRawDumpParser {
 
                                 if (incoming && p.isSYN()) {
                                     storeConversation(from);
-                                    lastTalks.put(from, new Conversation(LocalTime.parse(time), host, port));
+                                    lastTalks.put(from, new Conversation(LocalTime.parse(time), host, port, ttl));
                                     log.debug("Start new conv");
 
                                 } else if (p.isFIN() || p.isRST()) {
@@ -78,8 +79,11 @@ public class TCPRawDumpParser {
 
                                     log.debug("End conv");
                                 } else if (length > 0) {
-                                    Conversation conversation = lastTalks.computeIfAbsent(incoming ? from : to, ff -> new Conversation(LocalTime.parse(time), host, port));
+                                    Conversation conversation = lastTalks.computeIfAbsent(incoming ? from : to, ff -> new Conversation(LocalTime.parse(time), host, port, 0));
 
+                                    if (conversation.ttl == 0 && incoming) {
+                                        conversation.ttl = ttl;
+                                    }
 
                                     ByteBuffer buffer = (ByteBuffer) payload.readBytes(length);
                                     String data = new String(buffer.getArray());

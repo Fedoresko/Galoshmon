@@ -10,12 +10,14 @@ public class ConversationImmutable implements Iterable<Message> {
     public final LocalTime time;
     public final String host;
     public final long uuid;
+    public final int ttl;
 
-    ConversationImmutable(LocalTime time, String host, List<Message> messages, long uuid) {
+    ConversationImmutable(LocalTime time, String host, List<Message> messages, long uuid, int ttl) {
         this.messages = Collections.unmodifiableList(messages);
         this.time = time;
         this.host = host;
         this.uuid = uuid;
+        this.ttl = ttl;
     }
 
     public Iterator<Message> iterator() {

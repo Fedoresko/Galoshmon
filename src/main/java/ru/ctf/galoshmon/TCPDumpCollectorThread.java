@@ -108,7 +108,7 @@ public class TCPDumpCollectorThread extends Thread {
                     //TODO
                 } else if (incoming && flags.contains("S")) {
                     storeConversation(from, port);
-                    lastTalks.put(from, new Conversation(LocalTime.parse(time), host, port));
+                    lastTalks.put(from, new Conversation(LocalTime.parse(time), host, port, 0));
                     log.info("Start new conv");
 
                 } else if (incoming && flags.contains("F")) {
@@ -116,7 +116,7 @@ public class TCPDumpCollectorThread extends Thread {
 
                     log.info("End conv");
                 } else if (length > 0) {
-                    Conversation conversation = lastTalks.computeIfAbsent(incoming ? from : to, (ff) -> new Conversation(LocalTime.parse(time), host, port));
+                    Conversation conversation = lastTalks.computeIfAbsent(incoming ? from : to, (ff) -> new Conversation(LocalTime.parse(time), host, port, 0));
                     conversation.messages.addLast(new Message(LocalTime.parse(time), host, port, new String(payload), incoming));
 
                     log.info("New port " + port + " host " + (incoming ? from : to) + " incoming: " + incoming + " data: '" + new String(payload) + "'");

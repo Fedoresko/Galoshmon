@@ -6,18 +6,20 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class Conversation {
-    public final LocalTime time;
-    public final String host;
-    public final int port;
-    public final Deque<Message> messages = new LinkedList<>();
+    public LocalTime time;
+    public String host;
+    public int port;
+    public final LinkedList<Message> messages = new LinkedList<>();
+    public int ttl;
 
-    Conversation(LocalTime time, String host, int port) {
+    Conversation(LocalTime time, String host, int port, int ttl) {
         this.time = time;
         this.host = host;
         this.port = port;
+        this.ttl = ttl;
     }
 
     ConversationImmutable getFinal(long uuid) {
-        return new ConversationImmutable(time, host, (List<Message>) messages, uuid);
+        return new ConversationImmutable(time, host, messages, uuid, ttl);
     }
 }

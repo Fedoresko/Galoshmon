@@ -39,7 +39,7 @@
                 last_conv = data.last;
 
                 data.convs.forEach(item => {
-                    var text = "<div class=\"conversation\" id=\""+item.uuid+"\" onclick=\"conversationClick\">Time: "+item.time+"<br>Host: "+item.host+
+                    var text = "<div class=\"conversation\" id=\""+item.uuid+"\" onclick=\"conversationClick\">Time: "+item.time+" TTL: "+item.ttl+"<br>Host: "+item.host+
                     "<div class=\"msgcount\">"+item.outgoing+"↑ "+item.incoming+"↓</div><div class=\"fltcount\">";
                     item.marks.forEach(mark => {
                         text += "<div class=\"flt\" style=\"background-color: hsl("+mark.hue+", 75%, 25%)\">"+mark.nHits+"</div>";
@@ -73,7 +73,7 @@
                 var rbar = $("div.rightbar");
 
                 data.convs.forEach(item => {
-                    var text = "<div class=\"conversation\" id=\""+item.uuid+"\" onclick=\"conversationClick\">Time: "+item.time+"<br>Host: "+item.host+
+                    var text = "<div class=\"conversation\" id=\""+item.uuid+"\" onclick=\"conversationClick\">Time: "+item.time+" TTL: "+item.ttl+"<br>Host: "+item.host+
                     "<div class=\"msgcount\">"+item.outgoing+"↑ "+item.incoming+"↓</div><div class=\"fltcount\">";
                     item.marks.forEach(mark => {
                         text += "<div class=\"flt\" style=\"background-color: hsl("+mark.hue+", 75%, 25%)\">"+mark.nHits+"</div>";
@@ -375,7 +375,7 @@
                 <div class="filter" style="background-color: red">flag</div>
             </div>
         </div>
-        <img src="/logo" style="right:0; top:0; height:105px" alt="Калошмон v1.0">
+        <img src="/logo" style="right:0; top:0; height:105px" title="Калошмон v1.0">
     </div>
     <div class="barea">
         <div class="rightbar">

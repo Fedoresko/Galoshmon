@@ -39,7 +39,7 @@ class ConversationsJS implements Serializable {
             }
 
             return new ConversationJS(c.time.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
-                  c.host, Long.toString(c.uuid), incoming, outgoing, marks.toArray(FilterMarkJS[]::new));
+                  c.host, Long.toString(c.uuid), incoming, outgoing, marks.toArray(FilterMarkJS[]::new), c.ttl);
         } ).toArray(ConversationJS[]::new);
         last = convs[convs.length - 1].uuid;
     }
